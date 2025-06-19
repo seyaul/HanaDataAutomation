@@ -45,7 +45,7 @@ def transform_excel_file(filepath):
         #df_by_cat.to_csv(output_csv, index=False)
 
         # TODO: Create helper function instead
-        grouped_df_id = calc_profit_percentage_id(df,0)
+        grouped_df_id = calc_profit_percentage_accname(df,0)
         grouped_df_br = calc_profit_percentage_brand(df,0)
         grouped_df_brcat = calc_profit_percentage_brand(df_by_cat, 1)
 
@@ -83,7 +83,8 @@ def auto_capture_and_transform():
                 excel = get_excel_instance()
                 if not excel:
                     raise Exception
-                print("Gotcha bitch!")
+                print("Checking try-catch connecting to excel instance.. being here means there is a different primary pid, or excel is running" \
+                "in the background")
             except Exception:
                 if last_failed:
                     print("⚠️Excel not found. trying again.")
@@ -121,7 +122,7 @@ def auto_capture_and_transform():
             if last_failed:
                 print(f"⚠️ Error in detection loop: {e}")
                 last_failed = False
-        print("wat")
+        print("Repeating the while loop!")
         time.sleep(2)
 
 
@@ -137,12 +138,11 @@ def get_excel_instance():
         print("2")
         return None
 
-def calc_profit_percentage_id(df, vernum):
+def calc_profit_percentage_accname(df, vernum):
     if vernum == 0:
-        grouped_df = df.groupby("Item ID", as_index=False).agg({
+        grouped_df = df.groupby("Account Name", as_index=False).agg({
             "Sale Price": "sum",
             "Unit Cost": "sum",
-            "Item Name": "first"
         })
         grouped_df["Profit %"] = ((grouped_df["Sale Price"] - grouped_df["Unit Cost"])/ grouped_df["Sale Price"]) * 100
         grouped_df["Profit %"] = grouped_df["Profit %"].round(2).astype(str) + "%"
