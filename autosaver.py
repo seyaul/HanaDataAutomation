@@ -1,6 +1,6 @@
 """
 autosaver.py - Reliable Excel Book1 Capture Module
-Based on proven DDE + foreground approach with safety checks
+Based on proven DDE + foreground approach
 """
 
 import time
@@ -25,15 +25,12 @@ def list_excel_windows():
     return windows
 
 def find_book1_window_filtered():
-    """Find Book1 Excel window, excluding captured files - with better filtering."""
+    """Find Book1 Excel window, excluding captured files."""
     excel_windows = list_excel_windows()
     for pid, hwnd, title, vis in excel_windows:
         if vis and 'book1' in title.lower():
             if 'captured_' not in title.lower():
-                # Additional check: make sure it's actually a Book1 file
-                workbook_name = title.replace(" - Excel", "").strip().lower()
-                if workbook_name.startswith('book1'):
-                    return pid, hwnd, title
+                return pid, hwnd, title
     return None, None, None
 
 def bring_to_foreground(target_hwnd, verbose=True):
@@ -65,49 +62,8 @@ def bring_to_foreground(target_hwnd, verbose=True):
             print(f"   ❌ Error bringing to foreground: {e}")
         return False
 
-def verify_active_workbook_is_book_file(verbose=True):
-    """Verify that the currently active workbook is a Book file (Book1, Book2, etc.)."""
-    try:
-        server = dde.CreateServer()
-        server.Create("VerifyClient")
-        
-        conversation = dde.CreateConversation(server)
-        conversation.ConnectTo("Excel", "System")
-        
-        # Get the name of the active workbook
-        active_name = conversation.Request("ActiveWorkbook.Name")
-        
-        conversation.Close()
-        server.Shutdown()
-        
-        if verbose:
-            print(f"   📋 Active workbook: {active_name}")
-        
-        # Check if it's any Book file (Book1, Book2, etc.) and not a captured file
-        if active_name:
-            active_lower = active_name.lower()
-            is_book_file = (active_lower.startswith('book') and 
-                           'captured_' not in active_lower and
-                           'brand' not in active_lower and 
-                           'category' not in active_lower)
-            
-            if verbose:
-                if is_book_file:
-                    print(f"   ✅ Active workbook is a valid Book file")
-                else:
-                    print(f"   ❌ Active workbook is NOT a Book file - aborting to prevent wrong file capture")
-            
-            return is_book_file
-        
-        return False
-        
-    except Exception as e:
-        if verbose:
-            print(f"   ⚠️ Could not verify active workbook: {e}")
-        return False
-
 def save_book1_dde(target_title, save_folder, filename=None, verbose=True):
-    """Save Book1 using DDE to specified location with workbook targeting."""
+    """Save Book1 using DDE to specified location."""
     
     # Ensure save folder exists
     os.makedirs(save_folder, exist_ok=True)
@@ -143,32 +99,10 @@ def save_book1_dde(target_title, save_folder, filename=None, verbose=True):
         if verbose:
             print(f"   ✅ DDE Connected")
         
-        # Extract workbook name from title (remove " - Excel" suffix)
-        workbook_name = target_title.replace(" - Excel", "").strip()
+        # Simple save operation
+        result = conversation.Exec(f'[SAVE.AS("{full_path}")]')
         if verbose:
-            print(f"   🎯 Targeting workbook: {workbook_name}")
-        
-        # Method 1: Try to activate the specific workbook first
-        try:
-            activate_result = conversation.Exec(f'[ACTIVATE("{workbook_name}")]')
-            time.sleep(0.5)
-            if verbose:
-                print(f"   ✅ Workbook activated")
-        except Exception as e:
-            if verbose:
-                print(f"   ⚠️ Could not activate workbook: {e}")
-        
-        # Method 2: Use workbook-specific save command
-        try:
-            # Try the more specific syntax first
-            result = conversation.Exec(f'[SAVE.AS("{full_path}",1)]')  # 1 = Excel format
-            if verbose:
-                print(f"   📤 Workbook-specific save command sent")
-        except:
-            # Fallback to simple save
-            result = conversation.Exec(f'[SAVE.AS("{full_path}")]')
-            if verbose:
-                print(f"   📤 Fallback save command sent")
+            print(f"   📤 Save command sent")
         
         # Wait and check result
         time.sleep(2)
@@ -216,7 +150,7 @@ def save_book1_dde(target_title, save_folder, filename=None, verbose=True):
 
 def capture_book1(save_folder, filename=None, verbose=True):
     """
-    Main function: Capture Book1 workbook to specified folder with safety checks.
+    Main function: Capture Book1 workbook to specified folder.
     
     Args:
         save_folder (str): Directory to save the captured file
@@ -244,20 +178,11 @@ def capture_book1(save_folder, filename=None, verbose=True):
     
     # Bring to foreground
     success = bring_to_foreground(target_hwnd, verbose)
-    if not success:
-        if verbose:
-            print("❌ Failed to bring Book1 to foreground - aborting to prevent wrong file capture")
-        return None
+    if not success and verbose:
+        print("⚠️ Warning: Foreground operation failed, abortion...")
+        return
     
-    # SAFETY CHECK: Verify the active workbook is actually a Book file
-    time.sleep(1)  # Give Excel time to switch focus
-    if not verify_active_workbook_is_book_file(verbose):
-        if verbose:
-            print("❌ Active workbook is not a Book file - aborting save operation")
-            print("   🔄 Main loop will retry...")
-        return None
-    
-    # Save using DDE (now safe to proceed)
+    # Save using DDE
     saved_file = save_book1_dde(target_title, save_folder, filename, verbose)
     
     if saved_file and verbose:
